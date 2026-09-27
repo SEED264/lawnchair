@@ -15,6 +15,7 @@
  */
 package com.android.launcher3.uioverrides
 
+import android.Manifest
 import android.app.ActivityOptions
 import android.app.PendingIntent
 import android.app.role.RoleManager
@@ -25,6 +26,7 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
+import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.graphics.Bitmap
 import android.graphics.Rect
@@ -75,6 +77,13 @@ open class SystemApiWrapper @Inject constructor(@ApplicationContext context: Con
     }
 
     override fun createFadeOutAnimOptions(): ActivityOptions {
+        // LC-Note: Starting an activity with a RemoteTransition throws a SecurityException
+        // without this permission, e.g. when not installed as a system app.
+        if (mContext.checkSelfPermission(Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return super.createFadeOutAnimOptions()
+        }
         return try {
             ActivityOptions.makeBasic().apply {
                 remoteTransition = RemoteTransition(FadeOutRemoteTransition(), "FadeOut")
