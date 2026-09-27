@@ -199,6 +199,8 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
     private boolean mSearchExitInProgress;
     boolean showFastScroller;
     private boolean mRebindAdaptersAfterSearchAnimation;
+    // LC-Note: True while replaceAppsRVContainer() swaps the A-Z apps container.
+    private boolean mIsReplacingAppsRVContainer;
     private int mNavBarScrimHeight = 0;
     public SearchRecyclerView mSearchRecyclerView;
     protected SearchAdapterProvider<?> mMainAdapterProvider;
@@ -689,6 +691,12 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
             mRebindAdaptersAfterSearchAnimation = true;
             return;
         }
+        // LC-Note: Removing the old container can move focus to the search box, which clears the
+        // search and calls back into here while no container is attached. Adding another one at
+        // that point would leave two containers in the hierarchy, so let the outer call finish.
+        if (mIsReplacingAppsRVContainer) {
+            return;
+        }
         updateSearchResultsVisibility();
 
         boolean showTabs = shouldShowTabs();
@@ -700,7 +708,12 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
         // replaceAppsRVcontainer() needs to use both mUsingTabs value to remove the old view AND
         // showTabs value to create new view. Hence the mUsingTabs new value assignment MUST happen
         // after this call.
-        replaceAppsRVContainer(showTabs);
+        mIsReplacingAppsRVContainer = true;
+        try {
+            replaceAppsRVContainer(showTabs);
+        } finally {
+            mIsReplacingAppsRVContainer = false;
+        }
         mUsingTabs = showTabs;
 
         mAllAppsStore.unregisterIconContainer(mAH.get(AdapterHolder.MAIN).mRecyclerView);
@@ -1443,13 +1456,19 @@ public class ActivityAllAppsContainerView<T extends Context & ActivityContext>
     }
 
     protected void updateSearchResultsVisibility() {
+        // LC-Note: Can be null while replaceAppsRVContainer() swaps the container.
+        ViewGroup appsRVContainer = getAppsRecyclerViewContainer();
         if (isSearching()) {
             getSearchRecyclerView().setVisibility(VISIBLE);
-            getAppsRecyclerViewContainer().setVisibility(GONE);
+            if (appsRVContainer != null) {
+                appsRVContainer.setVisibility(GONE);
+            }
             mHeader.setVisibility(GONE);
         } else {
             getSearchRecyclerView().setVisibility(GONE);
-            getAppsRecyclerViewContainer().setVisibility(VISIBLE);
+            if (appsRVContainer != null) {
+                appsRVContainer.setVisibility(VISIBLE);
+            }
             // Keep the empty header shell hidden when search is off and there are no tabs.
             mHeader.setVisibility(
                     (isAppDrawerSearchBarHidden() && !mUsingTabs) ? View.GONE : View.VISIBLE);
