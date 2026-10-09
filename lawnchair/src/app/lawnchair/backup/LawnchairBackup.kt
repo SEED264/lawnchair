@@ -78,10 +78,12 @@ class LawnchairBackup(
             }
         }
         context.getDatabasePath(LAUNCHER_DB_FILE_NAME).parentFile?.deleteRecursively()
-        readZip(handlers)
-        // Written after the zip has been extracted: the backed up preferences file is one of
-        // the restored entries, so writing the grid state first would let it be overwritten.
+        // Must be written before the zip is extracted. The preferences are already loaded in
+        // memory, and extracting the backed up preferences file doesn't reload them, so a commit
+        // after extraction would write the stale in-memory values back over the restored file.
+        // The restored file also carries the grid state keys from when the backup was created.
         DeviceGridState(info.gridState).writeToPrefs(context, true)
+        readZip(handlers)
 
         val dbController = ModelDbController(context)
         RestoreDbTask.performRestore(context, dbController)
