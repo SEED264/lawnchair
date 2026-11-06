@@ -206,16 +206,26 @@ android {
     }.flatten().findAll { it.exists() }.toArray()
 
     def releaseSigning
-    try {
+    def keystorePropertiesFile = rootProject.file("keystore.properties")
+    if (keystorePropertiesFile.exists()) {
         def keystoreProperties = new Properties()
-        keystoreProperties.load(rootProject.file("keystore.properties").newInputStream())
-        releaseSigning = signingConfigs.create("release") {
-            keyAlias keystoreProperties['keyAlias']
-            keyPassword keystoreProperties['keyPassword']
-            storeFile rootProject.file(keystoreProperties['storeFile'])
-            storePassword keystoreProperties['storePassword']
+        keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+        // LC: Values can be 1Password secret references (op://vault/item/field). They are read
+        // with the 1Password CLI, so the secrets never go through environment variables or files.
+        def resolveSecret = { String key ->
+            String value = keystoreProperties[key]
+            if (value == null || !value.startsWith("op://")) return value
+            return providers.exec {
+                commandLine "op", "read", "--no-newline", value
+            }.standardOutput.asText.get()
         }
-    } catch (Exception ignored) {
+        releaseSigning = signingConfigs.create("release") {
+            keyAlias resolveSecret('keyAlias')
+            keyPassword resolveSecret('keyPassword')
+            storeFile rootProject.file(resolveSecret('storeFile'))
+            storePassword resolveSecret('storePassword')
+        }
+    } else {
         releaseSigning = signingConfigs.debug
     }
 
